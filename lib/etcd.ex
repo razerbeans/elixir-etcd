@@ -21,16 +21,28 @@ defmodule Etcd do
     case get! srv, root, [recursive: recursive] do
       %Node{dir: true, nodes: nodes} ->
         Enum.flat_map(nodes, &flat_node/1) |> Enum.filter(fn
-          (%Node{dir: true}) -> allow_node
-          (%Node{dir: false}) -> allow_leaf
+          {:dir, true} -> 
+            allow_node
+          {:dir, false} -> 
+            allow_leaf
+          _ ->
+            false
         end)
       node->
         [node]
+      _ ->
+        nil
     end
   end
 
   defp flat_node(%Node{dir: false}=leaf), do: [leaf]
-  defp flat_node(%Node{dir: true }=node), do: [node|Enum.flat_map(node.nodes, &flat_node/1)]
+  defp flat_node(%Node{dir: true }=node) do
+    if is_nil(node.nodes) do
+      node
+    else
+      Enum.flat_map(node.nodes, &flat_node/1)
+    end
+  end
 
   def get?(srv, key, opts \\ []) do
     try do
@@ -77,8 +89,8 @@ defmodule Etcd do
         reply
       {:ok,%{"errorCode" => errCode, "message" => errMsg},_} ->
         raise ServerError, code: errCode, message: errMsg
-      {:error,e} ->
-        raise e
+      {:error, {action, reason}} ->
+        raise ServerError, code: Atom.to_string(action), message: Atom.to_string(reason)
     end
   end
 
